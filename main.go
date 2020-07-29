@@ -35,9 +35,6 @@ func main() {
 	fmt.Scanln(&input)
 }
 
-func printLog() {
-}
-
 func checkErr(err error) {
 	if err != nil {
 		fmt.Println(err)
