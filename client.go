@@ -36,14 +36,21 @@ func startClient() {
 
 	var seqNum uint64
 	seqNum = 1
-	for {
+
+	pps := (bandWidth * 1000 * 1000) / 8000
+	tick := 1000000 / pps
+	fmt.Printf("band width %dmbps pps:%d tick %d micro\n", bandWidth, pps, tick)
+
+	ticker := time.NewTicker(time.Duration(tick) * time.Microsecond)
+	defer ticker.Stop()
+
+	for range ticker.C {
 		if sendStop {
 			break
 		}
 		binary.BigEndian.PutUint64(data, seqNum)
 		clientConn.Write(data)
 		mCounter.addSendSeq(seqNum)
-		time.Sleep(waitTime * time.Millisecond)
 		seqNum++
 	}
 }

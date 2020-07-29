@@ -4,23 +4,22 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"time"
 )
 
 var isServer bool
 var isClient bool
-var waitTime time.Duration
+var bandWidth int
 
 func main() {
 	isServerFlag := flag.Bool("s", false, "server")
 	isClientFlag := flag.Bool("c", false, "client")
-	waitTimeFlag := flag.Int("w", 100, "wait time")
+	bandWidthFlag := flag.Int("b", 100, "bandwidth")
 
 	flag.Parse()
 
 	isServer = *isServerFlag
 	isClient = *isClientFlag
-	waitTime = time.Duration(*waitTimeFlag)
+	bandWidth = *bandWidthFlag
 
 	if isServer {
 		go startServer()

@@ -16,7 +16,7 @@ func startServer() {
 	defer serverConn.Close()
 
 	recBuf := make([]byte, 100)
-	buf := make([]byte, 1400)
+	buf := make([]byte, 972)
 	for i := range buf {
 		buf[i] = 1
 	}
