@@ -28,7 +28,6 @@ func main() {
 
 	if isClient {
 		go startClient()
-		go printLog()
 	}
 
 	var input string

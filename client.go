@@ -10,19 +10,24 @@ import (
 )
 
 var mCounter *counter
+var sendStop bool
+var recStop bool
 
 func startClient() {
 	fmt.Println("client started")
 	mCounter = newCounter()
+	sendStop = false
+	recStop = false
 
 	serverAddr, err := net.ResolveUDPAddr("udp4", "127.0.0.1:21007")
 	checkErr(err)
 
 	clientConn, err := net.DialUDP("udp4", nil, serverAddr)
 	checkErr(err)
-	defer clientConn.Close()
+	// defer clientConn.Close()
 
 	go clientRecData(clientConn)
+	go stopWatch()
 
 	data := make([]byte, 10)
 	for i := range data {
@@ -32,6 +37,9 @@ func startClient() {
 	var seqNum uint64
 	seqNum = 1
 	for {
+		if sendStop {
+			break
+		}
 		binary.BigEndian.PutUint64(data, seqNum)
 		clientConn.Write(data)
 		mCounter.addSendSeq(seqNum)
@@ -43,6 +51,9 @@ func startClient() {
 func clientRecData(conn *net.UDPConn) {
 	recBuf := make([]byte, 1400)
 	for {
+		if recStop {
+			break
+		}
 		_, err := conn.Read(recBuf)
 		checkErr(err)
 		seqNum := binary.BigEndian.Uint64(recBuf)
@@ -51,11 +62,17 @@ func clientRecData(conn *net.UDPConn) {
 	}
 }
 
+func stopWatch() {
+	time.Sleep(10 * time.Second)
+	sendStop = true
+	time.Sleep(1 * time.Second)
+	recStop = true
+	time.Sleep(100 * time.Millisecond)
+	printLog()
+}
+
 func printLog() {
-	for {
-		time.Sleep(1 * time.Second)
-		fmt.Printf("send:%d rec:%d loss rate:%f\n", mCounter.getSendCount(), mCounter.getRecCount(), mCounter.lossRate())
-	}
+	fmt.Printf("send:%d rec:%d loss rate:%f\n", mCounter.getSendCount(), mCounter.getRecCount(), mCounter.lossRate())
 }
 
 type counter struct {
@@ -133,9 +150,7 @@ func (c *counter) lossRate() float32 {
 		return 0.0
 	}
 
-	inFlightSize := c.maxSendSeq - c.maxRecSeq
-
-	lossRate := float32(leftSize-inFlightSize) / float32(c.maxRecSeq)
+	lossRate := float32(leftSize) / float32(c.maxSendSeq)
 
 	c.seqList = list.New()
 	return lossRate * 100
