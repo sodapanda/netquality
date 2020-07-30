@@ -8,7 +8,7 @@ import (
 func startServer() {
 	fmt.Println("server started")
 
-	serverAddr, err := net.ResolveUDPAddr("udp4", ":21007")
+	serverAddr, err := net.ResolveUDPAddr("udp4", ":"+serverPort)
 	checkErr(err)
 
 	serverConn, err := net.ListenUDP("udp4", serverAddr)

@@ -19,7 +19,7 @@ func startClient() {
 	sendStop = false
 	recStop = false
 
-	serverAddr, err := net.ResolveUDPAddr("udp4", "127.0.0.1:21007")
+	serverAddr, err := net.ResolveUDPAddr("udp4", serverIP+":"+serverPort)
 	checkErr(err)
 
 	clientConn, err := net.DialUDP("udp4", nil, serverAddr)
@@ -55,13 +55,19 @@ func startClient() {
 	}
 }
 
+var largestPacketSize int
+
 func clientRecData(conn *net.UDPConn) {
 	recBuf := make([]byte, 1400)
+	largestPacketSize = 0
 	for {
 		if recStop {
 			break
 		}
-		_, err := conn.Read(recBuf)
+		length, err := conn.Read(recBuf)
+		if length > largestPacketSize {
+			largestPacketSize = length
+		}
 		checkErr(err)
 		seqNum := binary.BigEndian.Uint64(recBuf)
 		mCounter.removeRecSeq(seqNum)
@@ -85,7 +91,6 @@ func printLog() {
 type counter struct {
 	sync.Mutex
 	seqList    *list.List
-	maxRecSeq  uint64
 	maxSendSeq uint64
 	recCount   uint64
 }
@@ -93,7 +98,6 @@ type counter struct {
 func newCounter() *counter {
 	c := new(counter)
 	c.seqList = list.New()
-	c.maxRecSeq = 0
 	c.maxSendSeq = 0
 	return c
 }
@@ -129,10 +133,6 @@ func (c *counter) removeRecSeq(seq uint64) {
 	c.Lock()
 	defer c.Unlock()
 
-	if seq > c.maxRecSeq {
-		c.maxRecSeq = seq
-	}
-
 	var toRemove *list.Element
 	toRemove = nil
 
@@ -145,6 +145,8 @@ func (c *counter) removeRecSeq(seq uint64) {
 
 	if toRemove != nil {
 		c.seqList.Remove(toRemove)
+	} else {
+		fmt.Println("not found", seq)
 	}
 }
 
@@ -153,6 +155,11 @@ func (c *counter) lossRate() float32 {
 	defer c.Unlock()
 
 	leftSize := uint64(c.seqList.Len())
+	for e := c.seqList.Front(); e != nil; e = e.Next() {
+		fmt.Printf("%d,", e.Value)
+	}
+	fmt.Println("")
+
 	if leftSize == 0 {
 		return 0.0
 	}
