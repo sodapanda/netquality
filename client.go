@@ -33,9 +33,6 @@ func startClient() {
 		data[i] = 1
 	}
 
-	var seqNum uint64
-	seqNum = 1
-
 	pps := (bandWidth * 1000 * 1000) / 8000
 	tick := 1000000 / pps
 	fmt.Printf("band width %dmbps pps:%d tick %d micro\n", bandWidth, pps, tick)
@@ -47,10 +44,10 @@ func startClient() {
 		if sendStop {
 			break
 		}
-		binary.BigEndian.PutUint64(data, seqNum)
+		sendTs := time.Now().UnixNano()
+		binary.BigEndian.PutUint64(data, uint64(sendTs))
 		clientConn.Write(data)
-		mCounter.addSendSeq(seqNum)
-		seqNum++
+		mCounter.addSendTs(uint64(sendTs))
 	}
 }
 
@@ -68,9 +65,8 @@ func clientRecData(conn *net.UDPConn) {
 			largestPacketSize = length
 		}
 		checkErr(err)
-		seqNum := binary.BigEndian.Uint64(recBuf)
-		mCounter.removeRecSeq(seqNum)
-		mCounter.incRecCount()
+		sendTs := binary.BigEndian.Uint64(recBuf)
+		mCounter.addRecTs(sendTs)
 	}
 }
 
@@ -84,28 +80,22 @@ func stopWatch() {
 }
 
 func printLog() {
-	fmt.Printf("send:%d rec:%d loss rate:%f\n", mCounter.getSendCount(), mCounter.getRecCount(), mCounter.lossRate())
+	fmt.Printf("send:%d rec:%d loss rate:%f average rtt:%s\n", mCounter.getSendCount(), mCounter.getRecCount(), mCounter.lossRate(), mCounter.rtt())
 }
 
 type counter struct {
 	sync.Mutex
-	seqMap     map[uint64]bool
-	maxSendSeq uint64
-	recCount   uint64
+	seqMap    map[uint64]uint64
+	sendCount uint64
+	recCount  uint64
 }
 
 func newCounter() *counter {
 	c := new(counter)
-	c.seqMap = make(map[uint64]bool)
-	c.maxSendSeq = 0
+	c.seqMap = make(map[uint64]uint64)
+	c.sendCount = 0
+	c.recCount = 0
 	return c
-}
-
-func (c *counter) incRecCount() {
-	c.Lock()
-	defer c.Unlock()
-
-	c.recCount = c.recCount + 1
 }
 
 func (c *counter) getRecCount() uint64 {
@@ -117,26 +107,28 @@ func (c *counter) getRecCount() uint64 {
 func (c *counter) getSendCount() uint64 {
 	c.Lock()
 	defer c.Unlock()
-	return c.maxSendSeq
+	return c.sendCount
 }
 
-func (c *counter) addSendSeq(seq uint64) {
+func (c *counter) addSendTs(ts uint64) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.maxSendSeq = seq
-	c.seqMap[seq] = false
+	c.sendCount = c.sendCount + 1
+	c.seqMap[ts] = 0
 }
 
-func (c *counter) removeRecSeq(seq uint64) {
+func (c *counter) addRecTs(sendTs uint64) {
 	c.Lock()
 	defer c.Unlock()
 
-	if _, ok := c.seqMap[seq]; ok {
-		c.seqMap[seq] = true
+	if _, ok := c.seqMap[sendTs]; ok {
+		recTs := time.Now().UnixNano()
+		c.seqMap[sendTs] = uint64(recTs)
 	} else {
-		fmt.Println("cant find ", seq)
+		fmt.Println("cant find ", sendTs)
 	}
+	c.recCount = c.recCount + 1
 }
 
 func (c *counter) lossRate() float32 {
@@ -144,8 +136,8 @@ func (c *counter) lossRate() float32 {
 	defer c.Unlock()
 
 	var leftSize uint64
-	for _, v := range c.seqMap {
-		if !v {
+	for _, recTs := range c.seqMap {
+		if recTs == 0 {
 			leftSize = leftSize + 1
 		}
 	}
@@ -154,6 +146,24 @@ func (c *counter) lossRate() float32 {
 		return 0.0
 	}
 
-	lossRate := float32(leftSize) / float32(c.maxSendSeq)
+	lossRate := float32(leftSize) / float32(c.sendCount)
 	return lossRate * 100
+}
+
+func (c *counter) rtt() string {
+	c.Lock()
+	defer c.Unlock()
+
+	count := 0
+	sumn := uint64(0)
+	for sendTs, recTs := range c.seqMap {
+		if recTs != 0 {
+			rtt := recTs - sendTs
+			count++
+			sumn = sumn + rtt
+		}
+	}
+	rttNano := float32(sumn) / float32(count)
+	rttMill := rttNano / float32(1000000)
+	return fmt.Sprintf("%f", rttMill)
 }
