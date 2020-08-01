@@ -1,7 +1,6 @@
 package main
 
 import (
-	"container/list"
 	"encoding/binary"
 	"fmt"
 	"net"
@@ -90,14 +89,14 @@ func printLog() {
 
 type counter struct {
 	sync.Mutex
-	seqList    *list.List
+	seqMap     map[uint64]bool
 	maxSendSeq uint64
 	recCount   uint64
 }
 
 func newCounter() *counter {
 	c := new(counter)
-	c.seqList = list.New()
+	c.seqMap = make(map[uint64]bool)
 	c.maxSendSeq = 0
 	return c
 }
@@ -126,27 +125,17 @@ func (c *counter) addSendSeq(seq uint64) {
 	defer c.Unlock()
 
 	c.maxSendSeq = seq
-	c.seqList.PushBack(seq)
+	c.seqMap[seq] = false
 }
 
 func (c *counter) removeRecSeq(seq uint64) {
 	c.Lock()
 	defer c.Unlock()
 
-	var toRemove *list.Element
-	toRemove = nil
-
-	for e := c.seqList.Front(); e != nil; e = e.Next() {
-		if e.Value == seq {
-			toRemove = e
-			break
-		}
-	}
-
-	if toRemove != nil {
-		c.seqList.Remove(toRemove)
+	if _, ok := c.seqMap[seq]; ok {
+		c.seqMap[seq] = true
 	} else {
-		fmt.Println("not found", seq)
+		fmt.Println("cant find ", seq)
 	}
 }
 
@@ -154,18 +143,17 @@ func (c *counter) lossRate() float32 {
 	c.Lock()
 	defer c.Unlock()
 
-	leftSize := uint64(c.seqList.Len())
-	for e := c.seqList.Front(); e != nil; e = e.Next() {
-		fmt.Printf("%d,", e.Value)
+	var leftSize uint64
+	for _, v := range c.seqMap {
+		if !v {
+			leftSize = leftSize + 1
+		}
 	}
-	fmt.Println("")
 
 	if leftSize == 0 {
 		return 0.0
 	}
 
 	lossRate := float32(leftSize) / float32(c.maxSendSeq)
-
-	c.seqList = list.New()
 	return lossRate * 100
 }
