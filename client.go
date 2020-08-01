@@ -80,7 +80,7 @@ func stopWatch() {
 }
 
 func printLog() {
-	fmt.Printf("send:%d rec:%d loss rate:%f average rtt:%s\n", mCounter.getSendCount(), mCounter.getRecCount(), mCounter.lossRate(), mCounter.rtt())
+	fmt.Printf("send:%d rec:%d lossRate:%f AverageRtt:%s\n", mCounter.getSendCount(), mCounter.getRecCount(), mCounter.lossRate(), mCounter.rtt())
 }
 
 type counter struct {
@@ -156,14 +156,19 @@ func (c *counter) rtt() string {
 
 	count := 0
 	sumn := uint64(0)
+	maxRtt := uint64(0)
 	for sendTs, recTs := range c.seqMap {
 		if recTs != 0 {
 			rtt := recTs - sendTs
+			if rtt > maxRtt {
+				maxRtt = rtt
+			}
 			count++
 			sumn = sumn + rtt
 		}
 	}
 	rttNano := float32(sumn) / float32(count)
 	rttMill := rttNano / float32(1000000)
-	return fmt.Sprintf("%f", rttMill)
+	maxRttMilli := float32(maxRtt) / float32(1000000)
+	return fmt.Sprintf("%f maxRtt:%f\n", rttMill, maxRttMilli)
 }
