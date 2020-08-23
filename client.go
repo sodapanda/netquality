@@ -73,7 +73,7 @@ func clientRecData(conn *net.UDPConn) {
 func stopWatch() {
 	time.Sleep(10 * time.Second)
 	sendStop = true
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 	recStop = true
 	time.Sleep(100 * time.Millisecond)
 	printLog()
@@ -122,7 +122,10 @@ func (c *counter) addRecTs(sendTs uint64) {
 	c.Lock()
 	defer c.Unlock()
 
-	if _, ok := c.seqMap[sendTs]; ok {
+	if oldValue, ok := c.seqMap[sendTs]; ok {
+		if oldValue != 0 {
+			fmt.Println("Dup!", oldValue)
+		}
 		recTs := time.Now().UnixNano()
 		c.seqMap[sendTs] = uint64(recTs)
 	} else {
